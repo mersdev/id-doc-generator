@@ -190,6 +190,75 @@
             color: rgba(255, 255, 255, 0.7);
         }
 
+        /* Document preview styling */
+        .document-preview {
+            width: 210mm;
+            height: 297mm;
+            background: white;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+            margin: 0 auto;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .document-preview-page {
+            padding: 20mm;
+            position: relative;
+            height: 100%;
+        }
+        
+        .document-title {
+            text-align: center;
+            font-size: 18px;
+            font-weight: bold;
+            margin-bottom: 15mm;
+        }
+        
+        .id-card-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 20mm;
+        }
+        
+        .id-card {
+            width: 90mm;
+            height: 55mm;
+            border: 1px solid #e5e7eb;
+            position: relative;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            background: white;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+        
+        .id-card img {
+            max-width: 100%;
+            max-height: 100%;
+            object-fit: contain;
+        }
+        
+        .id-card-label {
+            position: absolute;
+            top: -20px;
+            left: 0;
+            width: 100%;
+            text-align: center;
+            font-size: 12px;
+            color: #6b7280;
+        }
+        
+        .document-watermark {
+            position: absolute;
+            bottom: 10mm;
+            left: 0;
+            width: 100%;
+            text-align: center;
+            font-size: 10px;
+            color: #d1d5db;
+        }
+
         /* Mobile optimizations */
         @media (max-width: 640px) {
             .card-guide {
@@ -220,37 +289,25 @@
                 height: 200px;
             }
             
-            #pdf-preview {
-                height: 300px;
+            .document-preview {
+                width: 100%;
+                height: auto;
+                transform: scale(0.8);
+                transform-origin: top center;
+                margin: -20px 0;
             }
-        }
-
-        /* PDF preview styling */
-        .pdf-preview-container {
-            width: 100%;
-            height: 100%;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            background: #f5f5f5;
-            border: 1px solid #e5e7eb;
-        }
-        
-        .pdf-preview-page {
-            width: 210mm;
-            height: 297mm;
-            background: white;
-            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
-            position: relative;
-            transform-origin: top left;
-            transform: scale(0.5);
-            margin: -75mm -105mm; /* Adjust to center the scaled preview */
-        }
-        
-        @media (max-width: 768px) {
-            .pdf-preview-page {
-                transform: scale(0.35);
-                margin: -100mm -150mm;
+            
+            .document-preview-page {
+                padding: 10mm;
+            }
+            
+            .id-card-container {
+                gap: 10mm;
+            }
+            
+            .id-card {
+                width: 80mm;
+                height: 49mm;
             }
         }
     </style>
@@ -264,7 +321,7 @@
                     <h1 class="text-xl md:text-2xl font-bold text-gray-800">ID Card Digitizer</h1>
                 </div>
                 <button id="generate-pdf" class="hidden bg-blue-500 hover:bg-blue-600 text-white px-3 py-1 md:px-4 md:py-2 rounded-lg font-medium transition text-sm md:text-base">
-                    <i class="fas fa-file-pdf mr-1 md:mr-2"></i> Generate PDF
+                    <i class="fas fa-file-pdf mr-1 md:mr-2"></i> Export to PDF
                 </button>
             </div>
         </div>
@@ -274,7 +331,7 @@
         <div class="max-w-4xl mx-auto">
             <div class="text-center mb-6 md:mb-10">
                 <h2 class="text-2xl md:text-3xl font-bold text-gray-800 mb-2">Convert your ID card to a professional document</h2>
-                <p class="text-gray-600 text-sm md:text-base">Capture both sides of your ID card and we'll create a clean PDF document for you</p>
+                <p class="text-gray-600 text-sm md:text-base">Capture both sides of your ID card and we'll create a clean document for you</p>
             </div>
 
             <!-- Step Indicator -->
@@ -292,7 +349,7 @@
                 </div>
                 <div class="step flex flex-col items-center z-20" data-step="3">
                     <div class="w-8 h-8 md:w-10 md:h-10 rounded-full bg-gray-200 text-gray-600 flex items-center justify-center font-bold mb-1 md:mb-2 text-sm md:text-base">3</div>
-                    <span class="text-xs md:text-sm font-medium text-gray-500">Generate PDF</span>
+                    <span class="text-xs md:text-sm font-medium text-gray-500">Preview</span>
                 </div>
             </div>
 
@@ -383,19 +440,30 @@
                 
                 <div class="flex justify-center">
                     <button id="continue-btn" class="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 md:px-6 md:py-3 rounded-lg font-medium transition flex items-center text-sm md:text-base">
-                        Continue <i class="fas fa-arrow-right ml-1 md:ml-2"></i>
+                        Preview Document <i class="fas fa-eye ml-1 md:ml-2"></i>
                     </button>
                 </div>
             </div>
 
-            <!-- PDF Preview Section -->
-            <div id="pdf-preview-section" class="hidden">
+            <!-- Document Preview Section -->
+            <div id="document-preview-section" class="hidden">
                 <div class="bg-white rounded-xl shadow-md p-4 md:p-6 mb-6 md:mb-8">
                     <h3 class="text-lg md:text-xl font-semibold text-gray-800 mb-3 md:mb-4">Your ID Document Preview</h3>
-                    <div class="border border-gray-200 rounded-lg p-3 md:p-4">
-                        <div id="pdf-preview" class="pdf-preview-container">
-                            <div class="pdf-preview-page">
-                                <!-- PDF preview will be rendered here -->
+                    <div class="border border-gray-200 rounded-lg p-3 md:p-4 overflow-x-auto">
+                        <div class="document-preview">
+                            <div class="document-preview-page">
+                                <div class="document-title">ID Card Document</div>
+                                <div class="id-card-container">
+                                    <div class="id-card" id="document-front">
+                                        <img id="document-front-img" src="" alt="Front of ID">
+                                        <div class="id-card-label">Front of ID Card</div>
+                                    </div>
+                                    <div class="id-card" id="document-back">
+                                        <img id="document-back-img" src="" alt="Back of ID">
+                                        <div class="id-card-label">Back of ID Card</div>
+                                    </div>
+                                </div>
+                                <div class="document-watermark">Created with ID Card Digitizer</div>
                             </div>
                         </div>
                     </div>
@@ -406,7 +474,7 @@
                         <i class="fas fa-edit mr-1 md:mr-2"></i> Edit Images
                     </button>
                     <button id="download-pdf" class="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 md:px-6 md:py-3 rounded-lg font-medium transition flex items-center text-sm md:text-base">
-                        <i class="fas fa-download mr-1 md:mr-2"></i> Download PDF
+                        <i class="fas fa-file-pdf mr-1 md:mr-2"></i> Export to PDF
                     </button>
                 </div>
             </div>
@@ -444,8 +512,7 @@
             const continueBtn = document.getElementById('continue-btn');
             const generatePdfBtn = document.getElementById('generate-pdf');
             const previewSection = document.getElementById('preview-section');
-            const pdfPreviewSection = document.getElementById('pdf-preview-section');
-            const pdfPreview = document.getElementById('pdf-preview');
+            const documentPreviewSection = document.getElementById('document-preview-section');
             const backToEditBtn = document.getElementById('back-to-edit');
             const downloadPdfBtn = document.getElementById('download-pdf');
             const captureTitle = document.getElementById('capture-title');
@@ -456,6 +523,8 @@
             const sizeWarning = document.getElementById('size-warning');
             const bgRemovalToggle = document.getElementById('bg-removal-toggle');
             const apiKeyInput = document.getElementById('api-key-input');
+            const documentFrontImg = document.getElementById('document-front-img');
+            const documentBackImg = document.getElementById('document-back-img');
             
             // Initialize camera
             async function initCamera() {
@@ -702,10 +771,18 @@
                 pdfDoc.setTextColor(200, 200, 200);
                 pdfDoc.text('Created with ID Card Digitizer', a4Width/2, a4Height - 10, { align: 'center' });
                 
-                // Create preview
-                const pdfUrl = pdfDoc.output('datauristring');
-                const pdfPreviewPage = document.querySelector('.pdf-preview-page');
-                pdfPreviewPage.innerHTML = `<iframe src="${pdfUrl}" style="width:100%;height:100%;border:none;"></iframe>`;
+                // Download the PDF
+                pdfDoc.save('id_card_document.pdf');
+            }
+            
+            // Update document preview with current images
+            function updateDocumentPreview() {
+                if (frontImage) {
+                    documentFrontImg.src = frontImage;
+                }
+                if (backImage) {
+                    documentBackImg.src = backImage;
+                }
             }
             
             // Update UI based on current step
@@ -741,7 +818,7 @@
                 if (currentStep === 1 || currentStep === 2) {
                     cameraView.style.display = 'block';
                     previewSection.classList.add('hidden');
-                    pdfPreviewSection.classList.add('hidden');
+                    documentPreviewSection.classList.add('hidden');
                     generatePdfBtn.classList.add('hidden');
                     
                     if (currentStep === 1) {
@@ -754,13 +831,13 @@
                 } else if (currentStep === 3) {
                     cameraView.style.display = 'none';
                     previewSection.classList.remove('hidden');
-                    pdfPreviewSection.classList.add('hidden');
+                    documentPreviewSection.classList.add('hidden');
                     generatePdfBtn.classList.remove('hidden');
                 } else if (currentStep === 4) {
                     previewSection.classList.add('hidden');
-                    pdfPreviewSection.classList.remove('hidden');
+                    documentPreviewSection.classList.remove('hidden');
                     generatePdfBtn.classList.add('hidden');
-                    generatePDF();
+                    updateDocumentPreview();
                 }
             }
             
@@ -823,9 +900,7 @@
             });
             
             downloadPdfBtn.addEventListener('click', function() {
-                if (pdfDoc) {
-                    pdfDoc.save('id_card_document.pdf');
-                }
+                generatePDF();
             });
             
             bgRemovalToggle.addEventListener('click', function() {
