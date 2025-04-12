@@ -8,7 +8,109 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/fabric.js/5.3.1/fabric.min.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <link rel="stylesheet" href="css/styles.css">
+    <style>
+        .camera-container {
+            position: relative;
+            width: 100%;
+            max-width: 500px;
+            margin: 0 auto;
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+        }
+        
+        #camera-view {
+            width: 100%;
+            display: block;
+            background: #f0f0f0;
+        }
+        
+        .capture-btn {
+            position: absolute;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            background: white;
+            border: 4px solid #3b82f6;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        
+        .capture-btn:hover {
+            transform: translateX(-50%) scale(1.05);
+        }
+        
+        .capture-btn:active {
+            transform: translateX(-50%) scale(0.95);
+        }
+        
+        .preview-card {
+            border: 2px dashed #d1d5db;
+            border-radius: 12px;
+            transition: all 0.3s;
+        }
+        
+        .preview-card:hover {
+            border-color: #3b82f6;
+            transform: translateY(-5px);
+        }
+        
+        .processing-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(255, 255, 255, 0.8);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 10;
+        }
+        
+        .spinner {
+            width: 40px;
+            height: 40px;
+            border: 4px solid rgba(59, 130, 246, 0.2);
+            border-radius: 50%;
+            border-top-color: #3b82f6;
+            animation: spin 1s ease-in-out infinite;
+        }
+        
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        
+        .guide-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: #3b82f6;
+            position: absolute;
+        }
+        
+        .dot-1 { top: 20px; left: 20px; }
+        .dot-2 { top: 20px; right: 20px; }
+        .dot-3 { bottom: 20px; left: 20px; }
+        .dot-4 { bottom: 20px; right: 20px; }
+        
+        .progress-bar {
+            height: 6px;
+            background: #e5e7eb;
+            border-radius: 3px;
+            overflow: hidden;
+        }
+        
+        .progress-fill {
+            height: 100%;
+            background: #3b82f6;
+            transition: width 0.3s;
+        }
+    </style>
 </head>
 <body class="bg-gray-50 min-h-screen">
     <header class="bg-white shadow-sm">
@@ -102,14 +204,9 @@
                                 <div class="spinner mb-3"></div>
                                 <p class="text-gray-700">Processing image...</p>
                             </div>
-                            <div class="absolute top-2 right-2 flex space-x-2">
-                                <button id="delete-front" class="bg-red-500 hover:bg-red-600 text-white p-2 rounded-full">
-                                    <i class="fas fa-trash"></i>
-                                </button>
-                                <button id="retake-front" class="bg-red-500 hover:bg-red-600 text-white p-2 rounded-full">
-                                    <i class="fas fa-redo"></i>
-                                </button>
-                            </div>
+                            <button id="retake-front" class="absolute top-2 right-2 bg-red-500 hover:bg-red-600 text-white p-2 rounded-full">
+                                <i class="fas fa-redo"></i>
+                            </button>
                         </div>
                     </div>
                     
@@ -121,14 +218,9 @@
                                 <div class="spinner mb-3"></div>
                                 <p class="text-gray-700">Processing image...</p>
                             </div>
-                            <div class="absolute top-2 right-2 flex space-x-2">
-                                <button id="delete-back" class="bg-red-500 hover:bg-red-600 text-white p-2 rounded-full hidden">
-                                    <i class="fas fa-trash"></i>
-                                </button>
-                                <button id="retake-back" class="bg-red-500 hover:bg-red-600 text-white p-2 rounded-full hidden">
-                                    <i class="fas fa-redo"></i>
-                                </button>
-                            </div>
+                            <button id="retake-back" class="absolute top-2 right-2 bg-red-500 hover:bg-red-600 text-white p-2 rounded-full hidden">
+                                <i class="fas fa-redo"></i>
+                            </button>
                         </div>
                     </div>
                 </div>
@@ -169,7 +261,304 @@
         </div>
     </footer>
 
-    <script type="module" src="js/app.js"></script>
-   
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // Global variables
+            let currentStep = 1;
+            let frontImage = null;
+            let backImage = null;
+            let stream = null;
+            let facingMode = "environment";
+            let pdfDoc = null;
+            
+            // DOM elements
+            const cameraView = document.getElementById('camera-view');
+            const captureBtn = document.getElementById('capture-btn');
+            const switchCameraBtn = document.getElementById('switch-camera');
+            const frontPreview = document.getElementById('front-preview');
+            const backPreview = document.getElementById('back-preview');
+            const frontProcessing = document.getElementById('front-processing');
+            const backProcessing = document.getElementById('back-processing');
+            const retakeFrontBtn = document.getElementById('retake-front');
+            const retakeBackBtn = document.getElementById('retake-back');
+            const continueBtn = document.getElementById('continue-btn');
+            const generatePdfBtn = document.getElementById('generate-pdf');
+            const previewSection = document.getElementById('preview-section');
+            const pdfPreviewSection = document.getElementById('pdf-preview-section');
+            const pdfPreview = document.getElementById('pdf-preview');
+            const backToEditBtn = document.getElementById('back-to-edit');
+            const downloadPdfBtn = document.getElementById('download-pdf');
+            const captureTitle = document.getElementById('capture-title');
+            const stepProgress = document.getElementById('step-progress');
+            const steps = document.querySelectorAll('.step');
+            
+            // Initialize camera
+            async function initCamera() {
+                try {
+                    if (stream) {
+                        stream.getTracks().forEach(track => track.stop());
+                    }
+                    
+                    const constraints = {
+                        video: {
+                            facingMode: facingMode,
+                            width: { ideal: 1280 },
+                            height: { ideal: 720 }
+                        }
+                    };
+                    
+                    stream = await navigator.mediaDevices.getUserMedia(constraints);
+                    cameraView.srcObject = stream;
+                } catch (err) {
+                    console.error("Camera error: ", err);
+                    alert("Could not access the camera. Please ensure you have granted camera permissions.");
+                }
+            }
+            
+            // Capture image from camera
+            function captureImage() {
+                const canvas = document.createElement('canvas');
+                canvas.width = cameraView.videoWidth;
+                canvas.height = cameraView.videoHeight;
+                const ctx = canvas.getContext('2d');
+                ctx.drawImage(cameraView, 0, 0, canvas.width, canvas.height);
+                
+                return canvas.toDataURL('image/jpeg');
+            }
+            
+            // Process image (simulated edge detection and background removal)
+            function processImage(imageData, callback) {
+                // In a real app, this would use more sophisticated image processing
+                // For the MVP, we'll simulate processing with a timeout
+                
+                setTimeout(() => {
+                    // Simulate edge detection and cropping
+                    const img = new Image();
+                    img.onload = function() {
+                        const canvas = document.createElement('canvas');
+                        const ctx = canvas.getContext('2d');
+                        
+                        // Simulate cropping to ID card (in reality, this would use edge detection)
+                        const margin = 0.1; // 10% margin
+                        const cropX = img.width * margin;
+                        const cropY = img.height * margin;
+                        const cropWidth = img.width * (1 - 2*margin);
+                        const cropHeight = img.height * (1 - 2*margin);
+                        
+                        canvas.width = cropWidth;
+                        canvas.height = cropHeight;
+                        
+                        // Draw the cropped image
+                        ctx.drawImage(img, cropX, cropY, cropWidth, cropHeight, 0, 0, cropWidth, cropHeight);
+                        
+                        // Add a white background (simulating background removal)
+                        const finalCanvas = document.createElement('canvas');
+                        finalCanvas.width = cropWidth;
+                        finalCanvas.height = cropHeight;
+                        const finalCtx = finalCanvas.getContext('2d');
+                        
+                        finalCtx.fillStyle = 'white';
+                        finalCtx.fillRect(0, 0, finalCanvas.width, finalCanvas.height);
+                        finalCtx.drawImage(canvas, 0, 0);
+                        
+                        callback(finalCanvas.toDataURL('image/jpeg'));
+                    };
+                    
+                    img.src = imageData;
+                }, 1500); // Simulate processing time
+            }
+            
+            // Generate PDF from images
+            function generatePDF() {
+                const { jsPDF } = window.jspdf;
+                pdfDoc = new jsPDF({
+                    orientation: 'portrait',
+                    unit: 'mm'
+                });
+                
+                // Add front image
+                if (frontImage) {
+                    const img = new Image();
+                    img.src = frontImage;
+                    
+                    // Calculate dimensions to fit A4 (210x297mm) with margins
+                    const maxWidth = 180; // mm
+                    const maxHeight = 120; // mm
+                    
+                    let width = img.width * 0.264583; // Convert px to mm (96dpi)
+                    let height = img.height * 0.264583;
+                    
+                    // Scale down if necessary
+                    const scale = Math.min(maxWidth / width, maxHeight / height, 1);
+                    width *= scale;
+                    height *= scale;
+                    
+                    const x = (210 - width) / 2;
+                    const y = 20; // mm from top
+                    
+                    pdfDoc.addImage(frontImage, 'JPEG', x, y, width, height);
+                }
+                
+                // Add back image
+                if (backImage) {
+                    const img = new Image();
+                    img.src = backImage;
+                    
+                    // Calculate dimensions to fit A4 (210x297mm) with margins
+                    const maxWidth = 180; // mm
+                    const maxHeight = 120; // mm
+                    
+                    let width = img.width * 0.264583; // Convert px to mm (96dpi)
+                    let height = img.height * 0.264583;
+                    
+                    // Scale down if necessary
+                    const scale = Math.min(maxWidth / width, maxHeight / height, 1);
+                    width *= scale;
+                    height *= scale;
+                    
+                    const x = (210 - width) / 2;
+                    const y = 150; // mm from top
+                    
+                    pdfDoc.addImage(backImage, 'JPEG', x, y, width, height);
+                }
+                
+                // Add title
+                pdfDoc.setFontSize(16);
+                pdfDoc.text('ID Card Document', 105, 10, { align: 'center' });
+                
+                // Create preview
+                const pdfUrl = pdfDoc.output('datauristring');
+                pdfPreview.innerHTML = `<iframe src="${pdfUrl}" style="width:100%;height:100%;border:none;"></iframe>`;
+            }
+            
+            // Update UI based on current step
+            function updateUI() {
+                // Update step progress
+                stepProgress.style.width = `${(currentStep - 1) * 50}%`;
+                
+                // Update step indicators
+                steps.forEach(step => {
+                    const stepNum = parseInt(step.dataset.step);
+                    const circle = step.querySelector('div');
+                    const text = step.querySelector('span');
+                    
+                    if (stepNum < currentStep) {
+                        circle.classList.remove('bg-gray-200', 'text-gray-600');
+                        circle.classList.add('bg-blue-500', 'text-white');
+                        text.classList.remove('text-gray-500');
+                        text.classList.add('text-gray-700');
+                    } else if (stepNum === currentStep) {
+                        circle.classList.remove('bg-gray-200', 'text-gray-600');
+                        circle.classList.add('bg-blue-500', 'text-white');
+                        text.classList.remove('text-gray-500');
+                        text.classList.add('text-gray-700');
+                    } else {
+                        circle.classList.remove('bg-blue-500', 'text-white');
+                        circle.classList.add('bg-gray-200', 'text-gray-600');
+                        text.classList.remove('text-gray-700');
+                        text.classList.add('text-gray-500');
+                    }
+                });
+                
+                // Show/hide sections based on current step
+                if (currentStep === 1 || currentStep === 2) {
+                    cameraView.style.display = 'block';
+                    previewSection.classList.add('hidden');
+                    pdfPreviewSection.classList.add('hidden');
+                    generatePdfBtn.classList.add('hidden');
+                    
+                    if (currentStep === 1) {
+                        captureTitle.textContent = 'Capture Front of ID Card';
+                    } else {
+                        captureTitle.textContent = 'Capture Back of ID Card';
+                    }
+                    
+                    initCamera();
+                } else if (currentStep === 3) {
+                    cameraView.style.display = 'none';
+                    previewSection.classList.remove('hidden');
+                    pdfPreviewSection.classList.add('hidden');
+                    generatePdfBtn.classList.remove('hidden');
+                } else if (currentStep === 4) {
+                    previewSection.classList.add('hidden');
+                    pdfPreviewSection.classList.remove('hidden');
+                    generatePdfBtn.classList.add('hidden');
+                    generatePDF();
+                }
+            }
+            
+            // Event listeners
+            captureBtn.addEventListener('click', function() {
+                const imageData = captureImage();
+                
+                if (currentStep === 1) {
+                    frontProcessing.classList.remove('hidden');
+                    processImage(imageData, function(processedImage) {
+                        frontImage = processedImage;
+                        frontPreview.src = processedImage;
+                        frontProcessing.classList.add('hidden');
+                        currentStep = 2;
+                        updateUI();
+                    });
+                } else if (currentStep === 2) {
+                    backProcessing.classList.remove('hidden');
+                    processImage(imageData, function(processedImage) {
+                        backImage = processedImage;
+                        backPreview.src = processedImage;
+                        backProcessing.classList.add('hidden');
+                        retakeBackBtn.classList.remove('hidden');
+                        currentStep = 3;
+                        updateUI();
+                    });
+                }
+            });
+            
+            switchCameraBtn.addEventListener('click', function() {
+                facingMode = facingMode === "user" ? "environment" : "user";
+                initCamera();
+            });
+            
+            retakeFrontBtn.addEventListener('click', function() {
+                currentStep = 1;
+                updateUI();
+            });
+            
+            retakeBackBtn.addEventListener('click', function() {
+                currentStep = 2;
+                updateUI();
+            });
+            
+            continueBtn.addEventListener('click', function() {
+                currentStep = 4;
+                updateUI();
+            });
+            
+            generatePdfBtn.addEventListener('click', function() {
+                currentStep = 4;
+                updateUI();
+            });
+            
+            backToEditBtn.addEventListener('click', function() {
+                currentStep = 3;
+                updateUI();
+            });
+            
+            downloadPdfBtn.addEventListener('click', function() {
+                if (pdfDoc) {
+                    pdfDoc.save('id_card_document.pdf');
+                }
+            });
+            
+            // Initialize
+            updateUI();
+            
+            // Clean up camera on page unload
+            window.addEventListener('beforeunload', function() {
+                if (stream) {
+                    stream.getTracks().forEach(track => track.stop());
+                }
+            });
+        });
+    </script>
 </body>
 </html>
