@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ID Card Digitizer | Convert ID Cards to PDF</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/fabric.js/5.3.1/fabric.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="css/styles.css">
+</head>
+<body class="bg-gray-50 min-h-screen">
+    <header class="bg-white shadow-sm">
+        <div class="container mx-auto px-4 py-6">
+            <div class="flex items-center justify-between">
+                <div class="flex items-center">
+                    <i class="fas fa-id-card text-blue-500 text-3xl mr-3"></i>
+                    <h1 class="text-2xl font-bold text-gray-800">ID Card Digitizer</h1>
+                </div>
+                <button id="generate-pdf" class="hidden bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-lg font-medium transition">
+                    <i class="fas fa-file-pdf mr-2"></i> Generate PDF
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <main class="container mx-auto px-4 py-8">
+        <div class="max-w-4xl mx-auto">
+            <div class="text-center mb-10">
+                <h2 class="text-3xl font-bold text-gray-800 mb-2">Convert your ID card to a professional document</h2>
+                <p class="text-gray-600">Capture both sides of your ID card and we'll create a clean PDF document for you</p>
+            </div>
+
+            <!-- Step Indicator -->
+            <div class="flex justify-between mb-10 relative">
+                <div class="absolute top-1/2 left-0 right-0 h-1 bg-gray-200 -translate-y-1/2 z-0"></div>
+                <div id="step-progress" class="absolute top-1/2 left-0 h-1 bg-blue-500 -translate-y-1/2 z-10 transition-all duration-300" style="width: 0%"></div>
+                
+                <div class="step flex flex-col items-center z-20" data-step="1">
+                    <div class="w-10 h-10 rounded-full bg-blue-500 text-white flex items-center justify-center font-bold mb-2">1</div>
+                    <span class="text-sm font-medium text-gray-700">Capture Front</span>
+                </div>
+                <div class="step flex flex-col items-center z-20" data-step="2">
+                    <div class="w-10 h-10 rounded-full bg-gray-200 text-gray-600 flex items-center justify-center font-bold mb-2">2</div>
+                    <span class="text-sm font-medium text-gray-500">Capture Back</span>
+                </div>
+                <div class="step flex flex-col items-center z-20" data-step="3">
+                    <div class="w-10 h-10 rounded-full bg-gray-200 text-gray-600 flex items-center justify-center font-bold mb-2">3</div>
+                    <span class="text-sm font-medium text-gray-500">Generate PDF</span>
+                </div>
+            </div>
+
+            <!-- Camera Section -->
+            <div id="camera-section" class="mb-12">
+                <div class="bg-white rounded-xl shadow-md p-6 mb-6">
+                    <h3 class="text-xl font-semibold text-gray-800 mb-4 flex items-center">
+                        <i class="fas fa-camera mr-2 text-blue-500"></i>
+                        <span id="capture-title">Capture Front of ID Card</span>
+                    </h3>
+                    
+                    <div class="mb-4 bg-blue-50 border border-blue-100 rounded-lg p-4">
+                        <div class="flex items-start">
+                            <i class="fas fa-info-circle text-blue-500 mt-1 mr-2"></i>
+                            <div>
+                                <p class="text-blue-800 font-medium">Tips for best results:</p>
+                                <ul class="list-disc list-inside text-blue-700 text-sm mt-1">
+                                    <li>Place ID card on a dark, contrasting surface</li>
+                                    <li>Ensure good lighting with minimal shadows</li>
+                                    <li>Hold your device parallel to the ID card</li>
+                                    <li>Make sure all edges are visible</li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="camera-container">
+                        <video id="camera-view" autoplay playsinline></video>
+                        <div class="guide-dot dot-1"></div>
+                        <div class="guide-dot dot-2"></div>
+                        <div class="guide-dot dot-3"></div>
+                        <div class="guide-dot dot-4"></div>
+                        <button id="capture-btn" class="capture-btn"></button>
+                    </div>
+                    
+                    <div class="mt-4 flex justify-center">
+                        <button id="switch-camera" class="text-blue-500 hover:text-blue-700 flex items-center">
+                            <i class="fas fa-sync-alt mr-2"></i> Switch Camera
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Preview Section -->
+            <div id="preview-section" class="hidden">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+                    <div class="bg-white rounded-xl shadow-md p-6">
+                        <h3 class="text-xl font-semibold text-gray-800 mb-4">Front of ID</h3>
+                        <div class="preview-card relative h-64 flex items-center justify-center overflow-hidden">
+                            <img id="front-preview" src="" alt="Front of ID" class="max-h-full max-w-full">
+                            <div id="front-processing" class="processing-overlay hidden">
+                                <div class="spinner mb-3"></div>
+                                <p class="text-gray-700">Processing image...</p>
+                            </div>
+                            <div class="absolute top-2 right-2 flex space-x-2">
+                                <button id="delete-front" class="bg-red-500 hover:bg-red-600 text-white p-2 rounded-full">
+                                    <i class="fas fa-trash"></i>
+                                </button>
+                                <button id="retake-front" class="bg-red-500 hover:bg-red-600 text-white p-2 rounded-full">
+                                    <i class="fas fa-redo"></i>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="bg-white rounded-xl shadow-md p-6">
+                        <h3 class="text-xl font-semibold text-gray-800 mb-4">Back of ID</h3>
+                        <div class="preview-card relative h-64 flex items-center justify-center overflow-hidden">
+                            <img id="back-preview" src="" alt="Back of ID" class="max-h-full max-w-full">
+                            <div id="back-processing" class="processing-overlay hidden">
+                                <div class="spinner mb-3"></div>
+                                <p class="text-gray-700">Processing image...</p>
+                            </div>
+                            <div class="absolute top-2 right-2 flex space-x-2">
+                                <button id="delete-back" class="bg-red-500 hover:bg-red-600 text-white p-2 rounded-full hidden">
+                                    <i class="fas fa-trash"></i>
+                                </button>
+                                <button id="retake-back" class="bg-red-500 hover:bg-red-600 text-white p-2 rounded-full hidden">
+                                    <i class="fas fa-redo"></i>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="flex justify-center">
+                    <button id="continue-btn" class="bg-blue-500 hover:bg-blue-600 text-white px-6 py-3 rounded-lg font-medium transition flex items-center">
+                        Continue <i class="fas fa-arrow-right ml-2"></i>
+                    </button>
+                </div>
+            </div>
+
+            <!-- PDF Preview Section -->
+            <div id="pdf-preview-section" class="hidden">
+                <div class="bg-white rounded-xl shadow-md p-6 mb-8">
+                    <h3 class="text-xl font-semibold text-gray-800 mb-4">Your ID Document Preview</h3>
+                    <div class="border border-gray-200 rounded-lg p-4">
+                        <div id="pdf-preview" class="bg-gray-50 h-96 overflow-auto flex items-center justify-center">
+                            <p class="text-gray-500">PDF preview will appear here</p>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="flex justify-center space-x-4">
+                    <button id="back-to-edit" class="bg-gray-200 hover:bg-gray-300 text-gray-800 px-6 py-3 rounded-lg font-medium transition">
+                        <i class="fas fa-edit mr-2"></i> Edit Images
+                    </button>
+                    <button id="download-pdf" class="bg-blue-500 hover:bg-blue-600 text-white px-6 py-3 rounded-lg font-medium transition flex items-center">
+                        <i class="fas fa-download mr-2"></i> Download PDF
+                    </button>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <footer class="bg-white border-t mt-12">
+        <div class="container mx-auto px-4 py-6 text-center text-gray-500 text-sm">
+            <p>© 2023 ID Card Digitizer. All rights reserved.</p>
+        </div>
+    </footer>
+
+    <script type="module" src="js/app.js"></script>
+   
+</body>
+</html>
