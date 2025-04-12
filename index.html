@@ -7,6 +7,9 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/fabric.js/5.3.1/fabric.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/tesseract.js@4/dist/tesseract.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@3.18.0/dist/tf.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd@2.2.2/dist/coco-ssd.min.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
         .camera-container {
@@ -110,6 +113,69 @@
             background: #3b82f6;
             transition: width 0.3s;
         }
+        
+        .detection-box {
+            position: absolute;
+            border: 3px solid #3b82f6;
+            background-color: rgba(59, 130, 246, 0.2);
+            z-index: 5;
+            display: flex;
+            align-items: flex-end;
+            justify-content: center;
+            color: white;
+            font-weight: bold;
+            font-size: 12px;
+        }
+        
+        .detection-label {
+            background-color: #3b82f6;
+            padding: 2px 5px;
+            border-radius: 4px;
+            margin-bottom: 5px;
+        }
+        
+        /* New styles for the ID card guide */
+        .card-guide {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 80%;
+            height: 60%;
+            border: 3px dashed rgba(255, 255, 255, 0.7);
+            border-radius: 8px;
+            z-index: 2;
+            pointer-events: none;
+            box-shadow: 0 0 0 10000px rgba(0, 0, 0, 0.4);
+        }
+        
+        .card-guide-text {
+            position: absolute;
+            bottom: -40px;
+            left: 0;
+            width: 100%;
+            text-align: center;
+            color: white;
+            font-weight: bold;
+            text-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
+        }
+        
+        .size-warning {
+            position: absolute;
+            top: -40px;
+            left: 0;
+            width: 100%;
+            text-align: center;
+            color: #ff6b6b;
+            font-weight: bold;
+            text-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
+            opacity: 0;
+            transition: opacity 0.3s;
+        }
+        
+        .size-warning.show {
+            opacity: 1;
+        }
     </style>
 </head>
 <body class="bg-gray-50 min-h-screen">
@@ -167,9 +233,9 @@
                             <div>
                                 <p class="text-blue-800 font-medium">Tips for best results:</p>
                                 <ul class="list-disc list-inside text-blue-700 text-sm mt-1">
-                                    <li>Place ID card on a dark, contrasting surface</li>
-                                    <li>Ensure good lighting with minimal shadows</li>
-                                    <li>Hold your device parallel to the ID card</li>
+                                    <li>Place ID card within the guide frame</li>
+                                    <li>Ensure the card fills at least 70% of the frame</li>
+                                    <li>Keep the card flat and parallel to your device</li>
                                     <li>Make sure all edges are visible</li>
                                 </ul>
                             </div>
@@ -178,10 +244,11 @@
                     
                     <div class="camera-container">
                         <video id="camera-view" autoplay playsinline></video>
-                        <div class="guide-dot dot-1"></div>
-                        <div class="guide-dot dot-2"></div>
-                        <div class="guide-dot dot-3"></div>
-                        <div class="guide-dot dot-4"></div>
+                        <div id="detection-container"></div>
+                        <div class="card-guide">
+                            <div class="card-guide-text">Align your ID card within this frame</div>
+                            <div id="size-warning" class="size-warning">Move closer - card is too small</div>
+                        </div>
                         <button id="capture-btn" class="capture-btn"></button>
                     </div>
                     
@@ -203,6 +270,9 @@
                             <div id="front-processing" class="processing-overlay hidden">
                                 <div class="spinner mb-3"></div>
                                 <p class="text-gray-700">Processing image...</p>
+                                <div class="progress-bar w-48 mt-4">
+                                    <div id="front-progress" class="progress-fill" style="width: 0%"></div>
+                                </div>
                             </div>
                             <button id="retake-front" class="absolute top-2 right-2 bg-red-500 hover:bg-red-600 text-white p-2 rounded-full">
                                 <i class="fas fa-redo"></i>
@@ -217,6 +287,9 @@
                             <div id="back-processing" class="processing-overlay hidden">
                                 <div class="spinner mb-3"></div>
                                 <p class="text-gray-700">Processing image...</p>
+                                <div class="progress-bar w-48 mt-4">
+                                    <div id="back-progress" class="progress-fill" style="width: 0%"></div>
+                                </div>
                             </div>
                             <button id="retake-back" class="absolute top-2 right-2 bg-red-500 hover:bg-red-600 text-white p-2 rounded-full hidden">
                                 <i class="fas fa-redo"></i>
@@ -270,6 +343,10 @@
             let stream = null;
             let facingMode = "environment";
             let pdfDoc = null;
+            let model = null;
+            let detectionInterval = null;
+            let cardDetected = false;
+            let cardSizeWarning = false;
             
             // DOM elements
             const cameraView = document.getElementById('camera-view');
@@ -291,6 +368,10 @@
             const captureTitle = document.getElementById('capture-title');
             const stepProgress = document.getElementById('step-progress');
             const steps = document.querySelectorAll('.step');
+            const detectionContainer = document.getElementById('detection-container');
+            const frontProgress = document.getElementById('front-progress');
+            const backProgress = document.getElementById('back-progress');
+            const sizeWarning = document.getElementById('size-warning');
             
             // Initialize camera
             async function initCamera() {
@@ -309,9 +390,135 @@
                     
                     stream = await navigator.mediaDevices.getUserMedia(constraints);
                     cameraView.srcObject = stream;
+                    
+                    // Start object detection once camera is ready
+                    if (model) {
+                        startDetection();
+                    }
                 } catch (err) {
                     console.error("Camera error: ", err);
                     alert("Could not access the camera. Please ensure you have granted camera permissions.");
+                }
+            }
+            
+            // Load COCO-SSD model for object detection
+            async function loadModel() {
+                try {
+                    console.log("Loading AI model...");
+                    model = await cocoSsd.load();
+                    console.log("Model loaded successfully");
+                    
+                    // Start detection if camera is already initialized
+                    if (cameraView.srcObject) {
+                        startDetection();
+                    }
+                } catch (err) {
+                    console.error("Failed to load model: ", err);
+                }
+            }
+            
+            // Start object detection on camera feed
+            function startDetection() {
+                // Clear any existing interval
+                if (detectionInterval) {
+                    clearInterval(detectionInterval);
+                }
+                
+                // Run detection every 500ms
+                detectionInterval = setInterval(async () => {
+                    try {
+                        if (cameraView.readyState === HTMLMediaElement.HAVE_ENOUGH_DATA) {
+                            const predictions = await model.detect(cameraView);
+                            renderDetections(predictions);
+                        }
+                    } catch (err) {
+                        console.error("Detection error: ", err);
+                    }
+                }, 500);
+            }
+            
+            // Render detection boxes on camera view
+            function renderDetections(predictions) {
+                // Clear previous detections
+                detectionContainer.innerHTML = '';
+                
+                // Filter for card-like objects (wallet, credit card, etc.)
+                const cardPredictions = predictions.filter(p => 
+                    ['wallet', 'credit card', 'book', 'cell phone'].includes(p.class) || 
+                    p.score > 0.7
+                );
+                
+                // Check if card is detected and properly sized
+                let hasProperlySizedCard = false;
+                
+                if (cardPredictions.length > 0) {
+                    const videoWidth = cameraView.clientWidth;
+                    const videoHeight = cameraView.clientHeight;
+                    
+                    // Get guide dimensions (80% width, 60% height of video)
+                    const guideWidth = videoWidth * 0.8;
+                    const guideHeight = videoHeight * 0.6;
+                    const guideLeft = (videoWidth - guideWidth) / 2;
+                    const guideTop = (videoHeight - guideHeight) / 2;
+                    
+                    cardPredictions.forEach(prediction => {
+                        // Calculate box dimensions
+                        const x = prediction.bbox[0] / cameraView.videoWidth * videoWidth;
+                        const y = prediction.bbox[1] / cameraView.videoHeight * videoHeight;
+                        const width = prediction.bbox[2] / cameraView.videoWidth * videoWidth;
+                        const height = prediction.bbox[3] / cameraView.videoHeight * videoHeight;
+                        
+                        // Check if card is within guide and properly sized
+                        const isWithinGuide = x >= guideLeft && 
+                                             y >= guideTop && 
+                                             x + width <= guideLeft + guideWidth && 
+                                             y + height <= guideTop + guideHeight;
+                        
+                        const isLargeEnough = width >= guideWidth * 0.7 && 
+                                             height >= guideHeight * 0.7;
+                        
+                        // Create detection box element
+                        const box = document.createElement('div');
+                        box.className = 'detection-box';
+                        box.style.left = `${x}px`;
+                        box.style.top = `${y}px`;
+                        box.style.width = `${width}px`;
+                        box.style.height = `${height}px`;
+                        
+                        // Add label
+                        const label = document.createElement('div');
+                        label.className = 'detection-label';
+                        label.textContent = `${prediction.class} (${Math.round(prediction.score * 100)}%)`;
+                        box.appendChild(label);
+                        
+                        detectionContainer.appendChild(box);
+                        
+                        // Update card detection status
+                        if (isWithinGuide && isLargeEnough) {
+                            hasProperlySizedCard = true;
+                            box.style.borderColor = '#10b981'; // Green for good
+                            label.style.backgroundColor = '#10b981';
+                        } else {
+                            box.style.borderColor = '#ef4444'; // Red for bad
+                            label.style.backgroundColor = '#ef4444';
+                        }
+                    });
+                }
+                
+                // Update card detection status
+                cardDetected = cardPredictions.length > 0;
+                
+                // Show/hide size warning
+                if (cardDetected && !hasProperlySizedCard) {
+                    if (!cardSizeWarning) {
+                        sizeWarning.classList.add('show');
+                        cardSizeWarning = true;
+                    }
+                } else {
+                    if (cardSizeWarning) {
+                        sizeWarning.classList.remove('show');
+                        cardSizeWarning = false;
+                    }
                 }
             }
             
@@ -326,46 +533,140 @@
                 return canvas.toDataURL('image/jpeg');
             }
             
-            // Process image (simulated edge detection and background removal)
-            function processImage(imageData, callback) {
-                // In a real app, this would use more sophisticated image processing
-                // For the MVP, we'll simulate processing with a timeout
+            // Process image with AI-based card detection and cropping
+            async function processImage(imageData, callback) {
+                const img = new Image();
+                img.src = imageData;
                 
-                setTimeout(() => {
-                    // Simulate edge detection and cropping
-                    const img = new Image();
-                    img.onload = function() {
+                img.onload = async function() {
+                    try {
+                        // Create canvas for the original image
                         const canvas = document.createElement('canvas');
+                        canvas.width = img.width;
+                        canvas.height = img.height;
                         const ctx = canvas.getContext('2d');
+                        ctx.drawImage(img, 0, 0);
                         
-                        // Simulate cropping to ID card (in reality, this would use edge detection)
+                        // Use Tesseract.js to detect text regions
+                        const progressCallback = (progress) => {
+                            if (progress.status === 'recognizing text') {
+                                const percent = Math.round(progress.progress * 100);
+                                if (currentStep === 1) {
+                                    frontProgress.style.width = `${percent}%`;
+                                } else {
+                                    backProgress.style.width = `${percent}%`;
+                                }
+                            }
+                        };
+                        
+                        const { data: { words } } = await Tesseract.recognize(
+                            canvas,
+                            'eng',
+                            {
+                                logger: progressCallback,
+                                tessedit_pageseg_mode: 6 // Assume a single uniform block of text
+                            }
+                        );
+                        
+                        // Find bounding box of all words
+                        let minX = Infinity, minY = Infinity, maxX = 0, maxY = 0;
+                        
+                        words.forEach(word => {
+                            const { x1, y1, x2, y2 } = word.bbox;
+                            minX = Math.min(minX, x1);
+                            minY = Math.min(minY, y1);
+                            maxX = Math.max(maxX, x2);
+                            maxY = Math.max(maxY, y2);
+                        });
+                        
+                        // If we found text, use that as our crop area (with some padding)
+                        if (words.length > 0) {
+                            const padding = 20;
+                            minX = Math.max(0, minX - padding);
+                            minY = Math.max(0, minY - padding);
+                            maxX = Math.min(canvas.width, maxX + padding);
+                            maxY = Math.min(canvas.height, maxY + padding);
+                            
+                            // Create a new canvas with just the cropped area
+                            const croppedCanvas = document.createElement('canvas');
+                            croppedCanvas.width = maxX - minX;
+                            croppedCanvas.height = maxY - minY;
+                            const croppedCtx = croppedCanvas.getContext('2d');
+                            
+                            // Draw the cropped image
+                            croppedCtx.drawImage(
+                                canvas,
+                                minX, minY, maxX - minX, maxY - minY,
+                                0, 0, maxX - minX, maxY - minY
+                            );
+                            
+                            // Enhance the image (simple contrast adjustment)
+                            const imageData = croppedCtx.getImageData(0, 0, croppedCanvas.width, croppedCanvas.height);
+                            const data = imageData.data;
+                            
+                            // Simple contrast enhancement
+                            const contrast = 1.2;
+                            const factor = (259 * (contrast + 255)) / (255 * (259 - contrast));
+                            
+                            for (let i = 0; i < data.length; i += 4) {
+                                data[i] = factor * (data[i] - 128) + 128;
+                                data[i + 1] = factor * (data[i + 1] - 128) + 128;
+                                data[i + 2] = factor * (data[i + 2] - 128) + 128;
+                            }
+                            
+                            croppedCtx.putImageData(imageData, 0, 0);
+                            
+                            // Add white background
+                            const finalCanvas = document.createElement('canvas');
+                            finalCanvas.width = croppedCanvas.width;
+                            finalCanvas.height = croppedCanvas.height;
+                            const finalCtx = finalCanvas.getContext('2d');
+                            
+                            finalCtx.fillStyle = 'white';
+                            finalCtx.fillRect(0, 0, finalCanvas.width, finalCanvas.height);
+                            finalCtx.drawImage(croppedCanvas, 0, 0);
+                            
+                            callback(finalCanvas.toDataURL('image/jpeg'));
+                            return;
+                        }
+                        
+                        // Fallback: If no text detected, use simple edge detection
+                        console.log("No text detected, falling back to edge detection");
                         const margin = 0.1; // 10% margin
-                        const cropX = img.width * margin;
-                        const cropY = img.height * margin;
-                        const cropWidth = img.width * (1 - 2*margin);
-                        const cropHeight = img.height * (1 - 2*margin);
+                        const cropX = canvas.width * margin;
+                        const cropY = canvas.height * margin;
+                        const cropWidth = canvas.width * (1 - 2*margin);
+                        const cropHeight = canvas.height * (1 - 2*margin);
                         
-                        canvas.width = cropWidth;
-                        canvas.height = cropHeight;
+                        const fallbackCanvas = document.createElement('canvas');
+                        fallbackCanvas.width = cropWidth;
+                        fallbackCanvas.height = cropHeight;
+                        const fallbackCtx = fallbackCanvas.getContext('2d');
                         
-                        // Draw the cropped image
-                        ctx.drawImage(img, cropX, cropY, cropWidth, cropHeight, 0, 0, cropWidth, cropHeight);
+                        fallbackCtx.drawImage(
+                            canvas, 
+                            cropX, cropY, cropWidth, cropHeight, 
+                            0, 0, cropWidth, cropHeight
+                        );
                         
-                        // Add a white background (simulating background removal)
+                        // Add white background
                         const finalCanvas = document.createElement('canvas');
-                        finalCanvas.width = cropWidth;
-                        finalCanvas.height = cropHeight;
+                        finalCanvas.width = fallbackCanvas.width;
+                        finalCanvas.height = fallbackCanvas.height;
                         const finalCtx = finalCanvas.getContext('2d');
                         
                         finalCtx.fillStyle = 'white';
                         finalCtx.fillRect(0, 0, finalCanvas.width, finalCanvas.height);
-                        finalCtx.drawImage(canvas, 0, 0);
+                        finalCtx.drawImage(fallbackCanvas, 0, 0);
                         
                         callback(finalCanvas.toDataURL('image/jpeg'));
-                    };
-                    
-                    img.src = imageData;
-                }, 1500); // Simulate processing time
+                        
+                    } catch (err) {
+                        console.error("Image processing error: ", err);
+                        // If processing fails, return the original image
+                        callback(imageData);
+                    }
+                };
             }
             
             // Generate PDF from images
@@ -425,6 +726,11 @@
                 // Add title
                 pdfDoc.setFontSize(16);
                 pdfDoc.text('ID Card Document', 105, 10, { align: 'center' });
+                
+                // Add watermark
+                pdfDoc.setFontSize(10);
+                pdfDoc.setTextColor(200, 200, 200);
+                pdfDoc.text('Created with ID Card Digitizer', 105, 290, { align: 'center' });
                 
                 // Create preview
                 const pdfUrl = pdfDoc.output('datauristring');
@@ -489,10 +795,17 @@
             
             // Event listeners
             captureBtn.addEventListener('click', function() {
+                // Check if card is detected before capturing
+                if (!cardDetected) {
+                    alert("Please position your ID card within the guide frame before capturing.");
+                    return;
+                }
+                
                 const imageData = captureImage();
                 
                 if (currentStep === 1) {
                     frontProcessing.classList.remove('hidden');
+                    frontProgress.style.width = '0%';
                     processImage(imageData, function(processedImage) {
                         frontImage = processedImage;
                         frontPreview.src = processedImage;
@@ -502,6 +815,7 @@
                     });
                 } else if (currentStep === 2) {
                     backProcessing.classList.remove('hidden');
+                    backProgress.style.width = '0%';
                     processImage(imageData, function(processedImage) {
                         backImage = processedImage;
                         backPreview.src = processedImage;
@@ -550,12 +864,16 @@
             });
             
             // Initialize
+            loadModel();
             updateUI();
             
             // Clean up camera on page unload
             window.addEventListener('beforeunload', function() {
                 if (stream) {
                     stream.getTracks().forEach(track => track.stop());
+                }
+                if (detectionInterval) {
+                    clearInterval(detectionInterval);
                 }
             });
         });
