@@ -12,7 +12,14 @@ const initCamera = async (videoElement, facingMode = 'environment') => {
             }
         };
         
-        const stream = await navigator.mediaDevices.getUserMedia(constraints);
+        const stream = await navigator.mediaDevices.getUserMedia({ 
+            video: { 
+              facingMode: 'environment',
+              width: { ideal: 1280 },
+              height: { ideal: 720 }
+            }, 
+            audio: false 
+          });
         videoElement.srcObject = stream;
         return stream;
     } catch (err) {
