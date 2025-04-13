@@ -1,12 +1,14 @@
  
-  // Initialize camera
+// Initialize camera
 const initCamera = async (videoElement, facingMode = 'environment') => {
     try {
         const constraints = {
             video: {
                 facingMode: facingMode,
-                width: { ideal: 1280 },
-                height: { ideal: 720 }
+                width: { ideal: 4096, min: 640, max: 4096 },
+                height: { ideal: 2160, min: 480, max: 2160 },
+                aspectRatio: { ideal: 1.7777777778 },
+                frameRate: { ideal: 30, min: 15 }
             }
         };
         
