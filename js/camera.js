@@ -43,10 +43,10 @@ const captureImage = (videoElement) => {
         const ctx = canvas.getContext('2d');
         ctx.drawImage(videoElement, 0, 0, canvas.width, canvas.height);
         
-        // Create a new canvas for cropped image with 9:16 aspect ratio
+        // Create a new canvas for cropped image with 16:9 aspect ratio
         const croppedCanvas = document.createElement('canvas');
         croppedCanvas.width = canvas.width; // Maintain original width
-        croppedCanvas.height = Math.round(canvas.width * (16/9)); // 9:16 ratio
+        croppedCanvas.height = canvas.width * (9/16); // Calculate height for 16:9 ratio
         
         const croppedCtx = croppedCanvas.getContext('2d');
         
