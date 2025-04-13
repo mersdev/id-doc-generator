@@ -45,19 +45,18 @@ const captureImage = (videoElement) => {
         
         // Create a new canvas for cropped image with ID card aspect ratio
         const croppedCanvas = document.createElement('canvas');
-        croppedCanvas.width = 400; // ~90mm in pixels
-        croppedCanvas.height = 250; // ~55mm in pixels
+        croppedCanvas.width = 350; // ~90mm in pixels
+        croppedCanvas.height = 220; // ~55mm in pixels
         
         const croppedCtx = croppedCanvas.getContext('2d');
         
-        // Calculate crop coordinates (center of image)
-        const cropX = (canvas.width - croppedCanvas.width) / 2;
+        // Calculate vertical crop coordinate (center of image)
         const cropY = (canvas.height - croppedCanvas.height) / 2;
         
-        // Draw cropped portion to new canvas
+        // Draw cropped portion to new canvas (maintaining full width)
         croppedCtx.drawImage(
             canvas, 
-            cropX, cropY, croppedCanvas.width, croppedCanvas.height,
+            0, cropY, canvas.width, croppedCanvas.height,
             0, 0, croppedCanvas.width, croppedCanvas.height
         );
         
