@@ -92,7 +92,7 @@ const processImageWithPhotoRoom = async (imageData) => {
             method: 'POST',
             headers: {
                 'Accept': 'image/png, application/json',
-                'x-api-key': 'sandbox_bbccf26070c9cf62142597cf8250acdd8a914d4a'
+                'x-api-key': 'bbccf26070c9cf62142597cf8250acdd8a914d4a'
             },
             body: formData
         });
