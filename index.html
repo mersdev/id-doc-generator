@@ -1,131 +1,258 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>ID Card Scanner</title>
-  <script src="https://cdn.tailwindcss.com"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
-  <link rel="stylesheet" href="styles.css">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ID Card Scanner & PDF Generator</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+    <style>
+        /* Custom CSS */
+        .card-frame {
+            width: 340px; /* ~90mm in pixels */
+            height: 210px; /* ~55mm in pixels */
+            border: 3px dashed #3b82f6;
+            border-radius: 8px;
+            position: relative;
+            overflow: hidden;
+            background-color: rgba(243, 244, 246, 0.5);
+        }
+        
+        .video-container {
+            position: relative;
+            width: 100%;
+            height: 100%;
+        }
+        
+        #cameraView, #cameraViewBack {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+        
+        .capture-btn {
+            position: absolute;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            background-color: white;
+            border: 4px solid #3b82f6;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .capture-btn-inner {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            background-color: #3b82f6;
+        }
+        
+        .preview-image {
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+            background-color: #f3f4f6;
+        }
+        
+        .a4-paper {
+            width: 100%;
+            height: 95vh;
+            background: white;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+            box-sizing: border-box;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+        
+        .id-card-preview {
+            width: 100%;
+            max-width: 90mm;
+            height: auto;
+            aspect-ratio: 90/55;
+            border: 1px solid #e5e7eb;
+            overflow: hidden;
+        }
+    
+        
+        .processing-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.7);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            z-index: 10;
+        }
+        
+        .spinner {
+            width: 40px;
+            height: 40px;
+            border: 4px solid rgba(255, 255, 255, 0.3);
+            border-radius: 50%;
+            border-top: 4px solid #3b82f6;
+            animation: spin 1s linear infinite;
+            margin-bottom: 15px;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        .step-indicator {
+            display: flex;
+            justify-content: center;
+            margin-bottom: 2rem;
+        }
+        
+        .step {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0 10px;
+            font-weight: bold;
+        }
+        
+        .step-line {
+            width: 60px;
+            height: 4px;
+            background-color: #e5e7eb;
+            margin-top: 18px;
+        }
+        
+        .step.active {
+            background-color: #3b82f6;
+            color: white;
+        }
+        
+        .step.inactive {
+            background-color: #e5e7eb;
+            color: #6b7280;
+        }
+        
+        .step-line.active {
+            background-color: #3b82f6;
+        }
+    </style>
 </head>
-<body class="min-h-screen p-4 md:p-8">
-  <div class="max-w-4xl mx-auto">
-    <div class="card mb-8">
-      <div class="card-header">
-        <h1 class="text-2xl font-bold">ID Card Scanner</h1>
-        <p class="text-sm text-gray-500">Capture, process, and export ID cards to PDF</p>
-      </div>
-      
-      <div class="tabs">
-        <div class="tab active" data-tab="capture">1. Capture</div>
-        <div class="tab" data-tab="preview">2. Preview</div>
-        <div class="tab" data-tab="export">3. Export</div>
-      </div>
-      
-      <div class="tab-content active" id="capture-tab">
-        <div class="card-content">
-          <div class="mb-4">
-            <h2 class="text-lg font-medium mb-2">ID Card Capture</h2>
-            <p class="text-sm text-gray-500 mb-4">Please capture the front and back of your ID card within the frame (90mm × 55mm)</p>
+<body class="bg-gray-50 min-h-screen">
+    <div class="container mx-auto px-4 py-8">
+        <h1 class="text-3xl font-bold text-center text-gray-800 mb-8">ID Card Scanner</h1>
+        
+        <!-- Step Indicator -->
+        <div class="step-indicator">
+            <div class="step active">1</div>
+            <div class="step-line active"></div>
+            <div class="step" id="step2">2</div>
+            <div class="step-line" id="stepLine2"></div>
+            <div class="step" id="step3">3</div>
+        </div>
+        
+        <!-- Main Content Area -->
+        <div class="flex flex-col items-center">
+            <!-- Step 1: Capture Front -->
+            <div id="step1Content" class="w-full max-w-2xl">
+                <h2 class="text-xl font-semibold text-center mb-4">Capture Front of ID Card</h2>
+                <p class="text-gray-600 text-center mb-6">Position the front of your ID card within the frame below</p>
+                
+                <div class="card-frame mx-auto mb-6">
+                    <div class="video-container">
+                        <video id="cameraView" autoplay playsinline></video>
+                        <div id="frontProcessing" class="processing-overlay" style="display: none;">
+                            <div class="spinner"></div>
+                            <p>Processing image...</p>
+                        </div>
+                    </div>
+                    <div class="capture-btn" id="captureFrontBtn">
+                        <div class="capture-btn-inner"></div>
+                    </div>
+                </div>
+                
+                <div class="flex justify-center">
+                    <button id="nextToBackBtn" class="bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-6 rounded-lg shadow disabled:opacity-50 disabled:cursor-not-allowed" disabled>
+                        Next: Back Side
+                    </button>
+                </div>
+            </div>
             
-            <div class="flex flex-wrap gap-4">
-              <div class="w-full md:w-[calc(50%-0.5rem)]">
-                <p class="text-sm font-medium mb-2">Front Side</p>
-                <div class="camera-container mb-2">
-                  <video id="front-video" autoplay playsinline muted class="mb-2"></video>
-                  <div class="id-card-frame absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2"></div>
+            <!-- Step 2: Capture Back -->
+            <div id="step2Content" class="w-full max-w-2xl" style="display: none;">
+                <h2 class="text-xl font-semibold text-center mb-4">Capture Back of ID Card</h2>
+                <p class="text-gray-600 text-center mb-6">Now position the back of your ID card within the frame below</p>
+                
+                <div class="card-frame mx-auto mb-6">
+                    <div class="video-container">
+                        <video id="cameraViewBack" autoplay playsinline></video>
+                        <div id="backProcessing" class="processing-overlay" style="display: none;">
+                            <div class="spinner"></div>
+                            <p>Processing image...</p>
+                        </div>
+                    </div>
+                    <div class="capture-btn" id="captureBackBtn">
+                        <div class="capture-btn-inner"></div>
+                    </div>
                 </div>
-                <button id="capture-front" class="btn btn-primary w-full">Capture Front</button>
-                <canvas id="front-canvas" class="hidden"></canvas>
-                <div id="front-preview" class="mt-4 hidden">
-                  <div class="id-card-frame">
-                    <img id="front-image" class="w-full h-full object-cover">
-                  </div>
-                  <button id="retake-front" class="btn btn-outline mt-2 w-full">Retake</button>
+                
+                <div class="flex justify-center gap-4">
+                    <button id="backToFrontBtn" class="bg-gray-300 hover:bg-gray-400 text-gray-800 font-medium py-2 px-6 rounded-lg shadow">
+                        Back
+                    </button>
+                    <button id="nextToPreviewBtn" class="bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-6 rounded-lg shadow disabled:opacity-50 disabled:cursor-not-allowed" disabled>
+                        Next: Preview
+                    </button>
                 </div>
-              </div>
-              
-              <div class="w-full md:w-[calc(50%-0.5rem)]">
-                <p class="text-sm font-medium mb-2">Back Side</p>
-                <div class="camera-container mb-2">
-                  <video id="back-video" autoplay playsinline muted class="mb-2"></video>
-                  <div class="id-card-frame absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2"></div>
-                </div>
-                <button id="capture-back" class="btn btn-primary w-full">Capture Back</button>
-                <canvas id="back-canvas" class="hidden"></canvas>
-                <div id="back-preview" class="mt-4 hidden">
-                  <div class="id-card-frame">
-                    <img id="back-image" class="w-full h-full object-cover">
-                  </div>
-                  <button id="retake-back" class="btn btn-outline mt-2 w-full">Retake</button>
-                </div>
-              </div>
             </div>
-          </div>
-        </div>
-        
-        <div class="card-footer flex justify-between">
-          <button class="btn btn-outline" disabled>Previous</button>
-          <button id="next-to-preview" class="btn btn-primary">Next</button>
-        </div>
-      </div>
-      
-      <div class="tab-content" id="preview-tab">
-        <div class="card-content">
-          <h2 class="text-lg font-medium mb-2">ID Card Preview</h2>
-          <p class="text-sm text-gray-500 mb-4">Your processed ID card images will be placed on an A4 paper</p>
-          
-          <div class="mb-4">
-            <button id="process-images" class="btn btn-primary mb-4">Process Images</button>
-            <div class="progress">
-              <div id="progress-bar" class="progress-bar" style="width: 0%"></div>
+            
+            <!-- Step 3: Preview and Export -->
+            <div id="step3Content" class="w-full" style="display: none;">
+                <h2 class="text-xl font-semibold text-center mb-4">Preview ID Card</h2>
+                <p class="text-gray-600 text-center mb-6">Here's how your ID card will appear on an A4 page</p>
+                
+                <div class="flex justify-center mb-8">
+                    <button id="exportPdfBtn" class="bg-green-600 hover:bg-green-700 text-white font-medium py-2 px-6 rounded-lg shadow flex items-center gap-2">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                            <path fill-rule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm3.293-7.707a1 1 0 011.414 0L9 10.586V3a1 1 0 112 0v7.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z" clip-rule="evenodd" />
+                        </svg>
+                        Export as PDF
+                    </button>
+                </div>
+                
+                <div id="a4Preview" class="a4-paper">
+                    <div class="flex flex-col items-center">
+                        
+                        <div class="id-card-preview" style="margin-bottom: 80px;">
+                            <img id="frontPreview" class="preview-image" src="" alt="Front of ID card">
+                        </div>
+                        
+                        <div class="id-card-preview">
+                            <img id="backPreview" class="preview-image" src="" alt="Back of ID card">
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="flex justify-center mt-8">
+                    <button id="restartProcessBtn" class="bg-gray-300 hover:bg-gray-400 text-gray-800 font-medium py-2 px-6 rounded-lg shadow">
+                        Start Over
+                    </button>
+                </div>
             </div>
-          </div>
-          
-          <div class="preview-container overflow-auto">
-            <div class="a4-page" id="a4-preview">
-              <h2 class="text-xl font-bold text-center mb-8">ID Card Document</h2>
-              <div class="id-card-preview">
-                <img id="processed-front-image" src="" alt="Front ID">
-                <p class="text-center text-sm mt-2">Front Side</p>
-              </div>
-              <div class="id-card-preview">
-                <img id="processed-back-image" src="" alt="Back ID">
-                <p class="text-center text-sm mt-2">Back Side</p>
-              </div>
-            </div>
-          </div>
         </div>
-        
-        <div class="card-footer flex justify-between">
-          <button id="back-to-capture" class="btn btn-outline">Previous</button>
-          <button id="next-to-export" class="btn btn-primary">Next</button>
-        </div>
-      </div>
-      
-      <div class="tab-content" id="export-tab">
-        <div class="card-content">
-          <h2 class="text-lg font-medium mb-2">Export to PDF</h2>
-          <p class="text-sm text-gray-500 mb-4">Generate a PDF document with your ID card images</p>
-          
-          <div class="flex justify-center">
-            <button id="export-pdf" class="btn btn-primary">Export to PDF</button>
-          </div>
-        </div>
-        
-        <div class="card-footer flex justify-between">
-          <button id="back-to-preview" class="btn btn-outline">Previous</button>
-          <button class="btn btn-primary" disabled>Finish</button>
-        </div>
-      </div>
     </div>
-  </div>
-  
-  <div id="processing-overlay" class="processing-overlay hidden">
-    <div class="spinner"></div>
-    <p id="processing-status">Processing images...</p>
-  </div>
-
-  <script type="module" src="js/main.js"></script>
+    <script src="js/main.js" type="module" ></script>
 </body>
 </html>
