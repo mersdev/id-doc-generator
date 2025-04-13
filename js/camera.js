@@ -45,8 +45,8 @@ const captureImage = (videoElement) => {
         
         // Create a new canvas for cropped image with ID card aspect ratio
         const croppedCanvas = document.createElement('canvas');
-        croppedCanvas.width = 350; // ~90mm in pixels
-        croppedCanvas.height = 220; // ~55mm in pixels
+        croppedCanvas.width = 400; // ~90mm in pixels
+        croppedCanvas.height = 250; // ~55mm in pixels
         
         const croppedCtx = croppedCanvas.getContext('2d');
         
