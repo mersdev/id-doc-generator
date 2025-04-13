@@ -2,16 +2,6 @@
 // Initialize camera
 const initCamera = async (videoElement, facingMode = 'environment') => {
     try {
-        const constraints = {
-            video: {
-                facingMode: facingMode,
-                width: { ideal: 4096, min: 640, max: 4096 },
-                height: { ideal: 2160, min: 480, max: 2160 },
-                aspectRatio: { ideal: 1.7777777778 },
-                frameRate: { ideal: 30, min: 15 }
-            }
-        };
-        
         const stream = await navigator.mediaDevices.getUserMedia({ 
             video: { 
               facingMode: 'environment',
@@ -40,15 +30,52 @@ const stopCamera = (stream) => {
  // Capture image from video stream
 const captureImage = (videoElement) => {
     const canvas = document.createElement('canvas');
-    canvas.width = 340; // 90mm in pixels
-    canvas.height = 210; // 55mm in pixels
-    const ctx = canvas.getContext('2d');
     
-    // Draw the current video frame to the canvas
-    ctx.drawImage(videoElement, 0, 0, canvas.width, canvas.height);
+    // Check if device is in portrait mode
+    const isPortrait = window.matchMedia('(orientation: portrait)').matches;
     
-    // Return the image data as a base64 string
-    return canvas.toDataURL('image/jpeg');
+    // Set canvas dimensions based on orientation
+    if (isPortrait) {
+        // For portrait mode, first capture full resolution
+        canvas.width = videoElement.videoWidth;
+        canvas.height = videoElement.videoHeight;
+        
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(videoElement, 0, 0, canvas.width, canvas.height);
+        
+        // Create a new canvas for cropped image with ID card aspect ratio
+        const croppedCanvas = document.createElement('canvas');
+        croppedCanvas.width = 340; // ~90mm in pixels
+        croppedCanvas.height = 210; // ~55mm in pixels
+        
+        const croppedCtx = croppedCanvas.getContext('2d');
+        
+        // Calculate crop coordinates (center of image)
+        const cropX = (canvas.width - croppedCanvas.width) / 2;
+        const cropY = (canvas.height - croppedCanvas.height) / 2;
+        
+        // Draw cropped portion to new canvas
+        croppedCtx.drawImage(
+            canvas, 
+            cropX, cropY, croppedCanvas.width, croppedCanvas.height,
+            0, 0, croppedCanvas.width, croppedCanvas.height
+        );
+        
+        // Return the cropped image
+        return croppedCanvas.toDataURL('image/jpeg', 0.9);
+    } else {
+        // For landscape, maintain ID card aspect ratio (90mm x 55mm)
+        canvas.width = 340; // ~90mm in pixels
+        canvas.height = 210; // ~55mm in pixels
+        
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(videoElement, 0, 0, canvas.width, canvas.height);
+        
+        return canvas.toDataURL('image/jpeg', 0.9);
+    }
+    
+    // Return the image data as a base64 string with higher quality
+    return canvas.toDataURL('image/jpeg', 0.9);
 };
 
 // Process image with PhotoRoom API
